@@ -1,4 +1,4 @@
-# Basically U-Neisnet
+# Basically U-Net
 
 A U-Net-style convolutional neural network for binary image segmentation, built with PyTorch.
 
@@ -38,7 +38,7 @@ All images are expected to be **grayscale PNGs**. The dataset loader will automa
 
 ## Model Architecture
 
-`BasicallyUneisnet` is a 4-level encoder-decoder network with skip connections.
+`BasicallyUnet` is a 4-level encoder-decoder network with skip connections.
 
 ```
 Input (1, H, W)
@@ -58,16 +58,6 @@ Output (1, H, W)  ∈ [0, 1]
 ```
 
 Each encoder block applies Conv→BN→ReLU, saves a skip connection, then MaxPool. Each decoder block upsamples, concatenates the skip, then applies Conv→BN→ReLU. The final head is a 1×1 convolution followed by Sigmoid, producing a single-channel probability mask.
-
----
-
-## Loss Function
-
-Training uses **Dice loss**:
-
-$$\mathcal{L} = 1 - \frac{2 \sum p \cdot t + 1}{\sum p + \sum t + 1}$$
-
-where $p$ is the predicted mask and $t$ is the ground truth. The smoothing constant (+1) prevents division by zero. Values range from 0 (perfect overlap) to 1 (no overlap).
 
 ---
 
