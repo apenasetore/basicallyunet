@@ -137,7 +137,6 @@ The following hyperparameters can be adjusted at the top of `main.py`:
 | `num_workers` | 4 | DataLoader worker threads |
 | `learning_rate` | 1e-3 | Initial learning rate |
 | `min_learning_rate` | 1e-5 | Minimum learning rate (LR floor) |
-| `nfilter` | 64 | Base channel count |
 | `save_frequency` | 10 | Save checkpoint every N epochs |
 | `augment_noise` | 0.025 | Gaussian noise std for augmentation |
 
