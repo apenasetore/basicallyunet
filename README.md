@@ -88,7 +88,9 @@ python main.py \
   -test_path  ./dataset/test \
   -model_file ./weights/model.pt \
   -log_file   ./weights/log.csv \
-  -num_epoch  100
+  -num_epoch  100 \
+  -state_file ./weights/state_model.pth 
+
 ```
 
 To **resume** from a checkpoint, add:
@@ -103,6 +105,7 @@ To **resume** from a checkpoint, add:
 python main.py \
   -job        TEST \
   -test_path  ./dataset/test \
+  -result_path ./results \
   -model_file ./weights/model.pt
 ```
 
@@ -120,7 +123,7 @@ Output masks and input images are saved to the test folder as `output{N}_label.p
 | `-model_file` | Path to save/load model weights |
 | `-log_file` | Path to save training log CSV |
 | `-num_epoch` | Number of training epochs |
-| `-state_file` | Checkpoint to resume training from |
+| `-state_file` | File with weghits to load |
 
 ---
 

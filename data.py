@@ -42,13 +42,15 @@ class Data(Dataset):
 
         if self.noise is not None and rand > 0.5:
             image = np.flip(image, axis=1).copy()
-
+        
+        #Normalize to [0,1] and add channel dimension
         image = np.expand_dims(image, axis=0).astype(np.float32) / 255.0
 
         if self.noise is not None and image_type == 'image':
             sigma = np.random.uniform(high=self.noise)
             noise = np.random.normal(scale=sigma, size=image.shape)
             image = np.clip(image + noise, 0, 1).astype(np.float32)
+
 
         return image
 
