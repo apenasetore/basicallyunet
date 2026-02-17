@@ -12,7 +12,7 @@ def dice_loss(pred,target):
 class Conv2dBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
         super().__init__()
-        self.con1v1 = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size,stride=stride, padding=padding, bias=False)
+        self.con1v1 = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size,stride=stride, padding=padding, bias=False) # this is a layer
         self.bn1 = nn.BatchNorm2d(out_channels)
         self.relu1 = nn.ReLU(inplace=True)
 
@@ -21,8 +21,35 @@ class Conv2dBlock(nn.Module):
         x = self.bn1(x)
         x = self.relu1(x)
 
+
         return x
     
+#----------------------------------------------------------
+class ResidualConv2dBottleneck(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
+        super().__init__()
+
+        self.con1v1 = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size,stride=stride, padding=padding, bias=False) # this is a layer
+        self.con2v2 = nn.Conv2d(out_channels, out_channels, kernel_size=kernel_size,stride=stride, padding=padding, bias=False) # this is a layer
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.relu1 = nn.ReLU(inplace=True)
+        self.identity_conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0, bias=False) 
+
+    def forward(self, x):
+        
+        identity = x
+        identity = self.identity_conv(identity) # Adjust the dimensions of the identity to match the output of the convolutional layers.
+        
+        x = self.con1v1(x)
+        x = self.bn(x)
+        x = self.relu1(x)
+        x = self.con2v2(x)
+        x = self.bn(x)
+        x = x + identity # residual connection.
+
+        return x
+    
+
 #----------------------------------------------------------
 class SkipConvConnection(nn.Module):
     def __init__(self, channels):
@@ -88,7 +115,7 @@ class DecoderBlock(nn.Module):
 class Bottleneck(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
-        self.conv_block = Conv2dBlock(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.conv_block = ResidualConv2dBottleneck(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
 
     def forward(self, x):
         return self.conv_block(x)
@@ -98,22 +125,25 @@ class Bottleneck(nn.Module):
 class BasicallyUnet(nn.Module):
     def __init__(self, in_channels=3, base_channels=64):
         super().__init__()
+        # I added a new encoder and a decoder block, and a bottleneck with residual connection.
+        # You can check the changes in the shapes of the tensors in the forward function, and how the skip connections are used to concatenate features from the encoder to the decoder.
 
         #ENCODER
-        
         self.e1 = EncoderBlock(in_channels, base_channels)
         self.e2 = EncoderBlock(base_channels, base_channels*2)
         self.e3 = EncoderBlock(base_channels*2, base_channels*4)    
         self.e4 = EncoderBlock(base_channels*4, base_channels*8)
+        self.e5 = EncoderBlock(base_channels*8, base_channels*16)
         
         #BOTTLENECK
-        self.bottleneck = Bottleneck(base_channels*8, base_channels*16)  
+        self.bottleneck = Bottleneck(base_channels*16, base_channels*32)  
 
         #DECODER  
-        self.d1 = DecoderBlock(base_channels*16, base_channels*8, base_channels*8)  
-        self.d2 = DecoderBlock(base_channels*8,  base_channels*4, base_channels*4)  
-        self.d3 = DecoderBlock(base_channels*4,  base_channels*2, base_channels*2)  
-        self.d4 = DecoderBlock(base_channels*2,  base_channels,   base_channels)  
+        self.d1 = DecoderBlock(base_channels*32, base_channels*16, base_channels*16)
+        self.d2 = DecoderBlock(base_channels*16, base_channels*8, base_channels*8)  
+        self.d3 = DecoderBlock(base_channels*8,  base_channels*4, base_channels*4)  
+        self.d4 = DecoderBlock(base_channels*4,  base_channels*2, base_channels*2)  
+        self.d5 = DecoderBlock(base_channels*2,  base_channels,   base_channels)  
 
         # Add final head
         self.final_conv = nn.Conv2d(base_channels, 1, kernel_size=1)
@@ -136,15 +166,16 @@ class BasicallyUnet(nn.Module):
         e2, skip2 = self.e2(e1) # ---> e1 shape: (batch_size, base_channels, height/2, width/2) --> e2 shape: (batch_size, base_channels*2, height/4, width/4) --> skip2 shape: (batch_size, base_channels*2, height/4, width/4)
         e3, skip3 = self.e3(e2) # ---> e2 shape: (batch_size, base_channels*2, height/4, width/4) --> e3 shape: (batch_size, base_channels*4, height/8, width/8) --> skip3 shape: (batch_size, base_channels*4, height/8, width/8)
         e4, skip4 = self.e4(e3) # ---> e3 shape: (batch_size, base_channels*4, height/8, width/8) --> e4 shape: (batch_size, base_channels*8, height/16, width/16) --> skip4 shape: (batch_size, base_channels*8, height/16, width/16)
-
+        e5, skip5 = self.e5(e4) # ---> e4 shape: (batch_size, base_channels*8, height/16, width/16) --> e5 shape: (batch_size, base_channels*16, height/32, width/32) --> skip5 shape: (batch_size, base_channels*16, height/32, width/32)
         # --- Bottleneck ---
-        x = self.bottleneck(e4) # ---> e3 shape: (batch_size, base_channels*4, height/8, width/8) --> x shape: (batch_size, base_channels*8, height/8, width/8)
+        x = self.bottleneck(e5) # ---> e5 shape: (batch_size, base_channels*16, height/32, width/32) --> x shape: (batch_size, base_channels*32, height/32, width/32)
  
         # --- Decoder ---
-        x = self.d1(x, skip4) # ---> x shape: (batch_size, base_channels*16, height/16, width/16) --> skip4 shape: (batch_size, base_channels*8, height/16, width/16) --> x shape after d1: (batch_size, base_channels*8, height/8, width/8)
-        x = self.d2(x, skip3) # ---> x shape: (batch_size, base_channels*8, height/8, width/8) --> skip3 shape: (batch_size, base_channels*4, height/8, width/8) --> x shape after d2: (batch_size, base_channels*4, height/4, width/4)
-        x = self.d3(x, skip2) # ---> x shape: (batch_size, base_channels*4, height/4, width/4) --> skip2 shape: (batch_size, base_channels*2, height/4, width/4) --> x shape after d3: (batch_size, base_channels*2, height/2, width/2)
-        x = self.d4(x, skip1) # ---> x shape: (batch_size, base_channels*2, height/2, width/2) --> skip1 shape: (batch_size, base_channels, height/2, width/2) --> x shape after d4: (batch_size, base_channels, height, width)
+        x = self.d1(x, skip5) # ---> x shape: (batch_size, base_channels*16, height/16, width/16) --> skip5 shape: (batch_size, base_channels*16, height/32, width/32) --> x shape after d1: (batch_size, base_channels*8, height/16, width/16)
+        x = self.d2(x, skip4) # ---> x shape: (batch_size, base_channels*8, height/16, width/16) --> skip4 shape: (batch_size, base_channels*8, height/16, width/16) --> x shape after d2: (batch_size, base_channels*4, height/8, width/8)
+        x = self.d3(x, skip3) # ---> x shape: (batch_size, base_channels*4, height/8, width/8) --> skip3 shape: (batch_size, base_channels*4, height/8, width/8) --> x shape after d3: (batch_size, base_channels*2, height/4, width/4)
+        x = self.d4(x, skip2) # ---> x shape: (batch_size, base_channels*2, height/4, width/4) --> skip2 shape: (batch_size, base_channels*2, height/4, width/4) --> x shape after d4: (batch_size, base_channels*1 , height/2 , width/2 )
+        x = self.d5(x , skip1 ) # ---> x shape: (batch_size , base_channels * 1 , height / 2 , width / 2 ) --> skip1 shape : ( batch_size , base_channels , height / 2 , width / 2 ) --> x shape after d5 : ( batch_size , 1 , height , width )
         
         # --- Final head --- 
         x = self.final_conv(x) # ---> x shape: (batch_size, base_channels, height, width) --> x shape after final_conv: (batch_size, 1, height, width)
